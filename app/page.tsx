@@ -95,7 +95,7 @@ export default async function Home() {
           <h2 className="text-xl font-semibold">Current Architecture</h2>
 
           <div className="mt-4 rounded-xl bg-zinc-950 p-4 font-mono text-sm text-zinc-300">
-            <p>cloudops-portal → http://localhost:4000/status → core-api</p>
+            <p>cloudops-portal → {process.env.NEXT_PUBLIC_CORE_API_URL}/status → core-api</p>
           </div>
         </div>
       </section>
