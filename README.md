@@ -27,7 +27,11 @@ El proyecto busca cubrir conceptos como:
 - Contenedores con Docker
 - Orquestación local con Docker Compose
 - Variables de entorno
+- Integración frontend-backend
+- Deploy frontend en Vercel
+- Deploy backend en DigitalOcean App Platform
 - Logs básicos de aplicación
+- Healthchecks de contenedores
 - CI/CD
 - Kubernetes
 - Observabilidad
@@ -41,11 +45,18 @@ El proyecto busca cubrir conceptos como:
 ```bash
 cloud-ops-lab/
 ├── cloudops-portal/
-│   └── Frontend construido con Next.js
+│   ├── app/
+│   ├── .env.example
+│   ├── .env.local              # No se sube a GitHub
+│   ├── package.json
+│   └── README.md
 │
 ├── core-api/
 │   ├── Dockerfile
 │   ├── .dockerignore
+│   ├── .env                    # No se sube a GitHub
+│   ├── .env.example
+│   ├── .gitignore
 │   ├── package.json
 │   ├── package-lock.json
 │   └── index.js
@@ -61,17 +72,24 @@ cloud-ops-lab/
 
 - Aplicación creada con Next.js
 - Proyecto conectado a GitHub
-- Despliegue inicial en Vercel
-- Base lista para construir el dashboard CloudOps
+- Despliegue activo en Vercel
+- Variable pública configurada para consumir el backend
+- Consume el endpoint `GET /status` de `core-api`
+- Muestra el estado del backend en la interfaz
 
 ### Backend — `core-api`
 
 - Microservicio creado con Node.js + Express
 - API funcional localmente
+- API desplegada públicamente en DigitalOcean App Platform
 - Contenerizado con Docker
-- Ejecutado correctamente mediante Docker Compose
-- Variables de entorno configuradas desde `docker-compose.yml`
+- Ejecutado localmente mediante Docker Compose
+- Variables de entorno configuradas mediante `.env` local y variables cloud
+- Archivo `.env.example` disponible como plantilla segura
 - Middleware básico de logging implementado con `console.log`
+- CORS configurado para permitir consumo desde frontend
+- Healthcheck configurado localmente en `docker-compose.yml`
+- Contenedor local validado con estado `healthy`
 
 Endpoints disponibles:
 
@@ -98,6 +116,7 @@ Endpoints disponibles:
 
 - Node.js
 - Express.js
+- CORS
 
 ### DevOps / Cloud
 
@@ -106,17 +125,169 @@ Endpoints disponibles:
 - Docker
 - Docker Compose
 - Vercel
+- DigitalOcean App Platform
 - Kubernetes, próximamente
-- DigitalOcean, próximamente
 - Terraform, próximamente
 - Ansible, próximamente
-- Observabilidad, próximamente
+- Observabilidad avanzada, próximamente
+
+---
+
+## 🌐 Arquitectura actual
+
+### Arquitectura local
+
+```bash
+Usuario
+  ↓
+http://localhost:3000
+  ↓
+cloudops-portal
+  ↓
+http://localhost:4000/status
+  ↓
+core-api en Docker
+```
+
+### Arquitectura en cloud
+
+```bash
+Usuario
+  ↓
+Vercel
+cloudops-portal
+  ↓
+NEXT_PUBLIC_CORE_API_URL
+  ↓
+DigitalOcean App Platform
+core-api
+  ↓
+GET /status
+```
+
+Backend público actual:
+
+```bash
+https://whale-app-6iffy.ondigitalocean.app
+```
+
+Endpoints públicos:
+
+```bash
+https://whale-app-6iffy.ondigitalocean.app/health
+https://whale-app-6iffy.ondigitalocean.app/status
+```
+
+---
+
+## 🔗 Integración Frontend → Backend
+
+El frontend `cloudops-portal` ya se comunica con el backend `core-api`.
+
+La variable utilizada en Next.js es:
+
+```env
+NEXT_PUBLIC_CORE_API_URL=http://localhost:4000
+```
+
+En local, esta variable debe vivir en:
+
+```bash
+cloudops-portal/.env.local
+```
+
+Para producción en Vercel, esta variable debe configurarse desde la plataforma de Vercel con el valor público de DigitalOcean:
+
+```env
+NEXT_PUBLIC_CORE_API_URL=https://whale-app-6iffy.ondigitalocean.app
+```
+
+También debe existir una plantilla segura en:
+
+```bash
+cloudops-portal/.env.example
+```
+
+con un valor de referencia:
+
+```env
+NEXT_PUBLIC_CORE_API_URL=http://localhost:4000
+```
+
+El frontend consume actualmente:
+
+```bash
+GET /status
+```
+
+Respuesta esperada:
+
+```json
+{
+  "service": "core-api",
+  "status": "running"
+}
+```
+
+> Nota: en producción no se debe usar `localhost:4000`, porque Vercel no puede consumir servicios que solo existen en la máquina local. En producción se usa la URL pública del backend desplegado en DigitalOcean.
+
+---
+
+## 🚀 Deploy actual
+
+### Frontend en Vercel
+
+Frontend desplegado en Vercel:
+
+```bash
+https://cloudops-portal.vercel.app/
+```
+
+La variable de entorno de producción en Vercel debe ser:
+
+```env
+NEXT_PUBLIC_CORE_API_URL=https://whale-app-6iffy.ondigitalocean.app
+```
+
+Después de cambiar una variable `NEXT_PUBLIC_` en Vercel, se debe hacer redeploy para que Next.js tome el nuevo valor durante el build.
+
+### Backend en DigitalOcean App Platform
+
+Backend desplegado en DigitalOcean App Platform:
+
+```bash
+https://whale-app-6iffy.ondigitalocean.app
+```
+
+Variables configuradas en DigitalOcean:
+
+```env
+NODE_ENV=production
+PORT=3000
+```
+
+Configuración principal del servicio:
+
+```bash
+Tipo de recurso: Web Service
+Estrategia de build: Dockerfile
+Puerto HTTP público: 3000
+Contenedores: 1
+Tamaño inicial: 512 MB RAM / 1 vCPU compartida
+```
+
+Pruebas públicas:
+
+```bash
+curl https://whale-app-6iffy.ondigitalocean.app/health
+curl https://whale-app-6iffy.ondigitalocean.app/status
+```
 
 ---
 
 ## 🐳 Dockerización de `core-api`
 
-El backend `core-api` ya cuenta con:
+El backend `core-api` cuenta con:
 
 ```bash
 core-api/
@@ -160,13 +331,13 @@ http://localhost:4000
 
 ## 🧩 Docker Compose
 
-El proyecto ya cuenta con un archivo `docker-compose.yml` en la raíz:
+El proyecto cuenta con un archivo `docker-compose.yml` en la raíz:
 
 ```bash
 cloud-ops-lab/docker-compose.yml
 ```
 
-Configuración actual:
+Configuración actual recomendada:
 
 ```yaml
 services:
@@ -178,42 +349,87 @@ services:
     container_name: core-api-container
     ports:
       - "4000:3000"
-    environment:
-      - PORT=3000
-      - NODE_ENV=development
+    env_file:
+      - ./core-api/.env
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 ```
 
 ### ¿Qué hace este archivo?
 
+- Lee la configuración del servicio `core-api`
 - Construye la imagen usando `core-api/Dockerfile`
 - Asigna el tag `core-api:dev`
 - Crea el contenedor `core-api-container`
 - Mapea el puerto `4000` de la máquina local al puerto `3000` del contenedor
-- Inyecta variables de entorno al contenedor
+- Lee variables desde `./core-api/.env`
+- Configura un healthcheck contra `/health`
 - Reinicia el servicio automáticamente salvo que se detenga manualmente
 
 ---
 
 ## ⚙️ Variables de entorno
 
-El puerto interno del backend ya no está fijo directamente en el código.
+### Backend local
 
-En `index.js` se utiliza:
+En `core-api/index.js` se utiliza:
 
 ```js
 const PORT = process.env.PORT || 3000;
 ```
 
-Y desde `docker-compose.yml` se inyecta:
+Y desde `docker-compose.yml` se carga el archivo:
 
 ```yaml
-environment:
-  - PORT=3000
-  - NODE_ENV=development
+env_file:
+  - ./core-api/.env
 ```
 
-Esto permite separar la configuración del código.
+El archivo local `core-api/.env` contiene:
+
+```env
+PORT=3000
+NODE_ENV=development
+```
+
+Este archivo no debe subirse a GitHub.
+
+La plantilla segura `core-api/.env.example` sí debe subirse:
+
+```env
+PORT=3000
+NODE_ENV=development
+```
+
+### Backend en DigitalOcean
+
+En DigitalOcean App Platform las variables se configuran en la plataforma:
+
+```env
+NODE_ENV=production
+PORT=3000
+```
+
+### Frontend local
+
+En `cloudops-portal/.env.local`:
+
+```env
+NEXT_PUBLIC_CORE_API_URL=http://localhost:4000
+```
+
+### Frontend en Vercel
+
+En Vercel:
+
+```env
+NEXT_PUBLIC_CORE_API_URL=https://whale-app-6iffy.ondigitalocean.app
+```
 
 ### Diferencia importante
 
@@ -221,7 +437,7 @@ Esto permite separar la configuración del código.
 PORT=3000
 ```
 
-Define el puerto interno donde Express escucha dentro del contenedor.
+Define el puerto interno donde Express escucha dentro del contenedor o en DigitalOcean.
 
 ```yaml
 ports:
@@ -229,6 +445,41 @@ ports:
 ```
 
 Mapea el puerto `4000` de la máquina local hacia el puerto `3000` del contenedor.
+
+---
+
+## 🩺 Healthcheck
+
+El servicio `core-api` tiene un healthcheck configurado en Docker Compose:
+
+```yaml
+healthcheck:
+  test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 10s
+```
+
+Este healthcheck se ejecuta dentro del contenedor, por eso usa:
+
+```bash
+http://localhost:3000/health
+```
+
+No usa `localhost:4000`, porque el puerto `4000` existe en la máquina local. Dentro del contenedor, la API escucha en el puerto `3000`.
+
+Para validar el estado:
+
+```bash
+docker ps
+```
+
+Resultado esperado:
+
+```bash
+Up ... (healthy)
+```
 
 ---
 
@@ -266,6 +517,35 @@ O directamente con el nombre del contenedor:
 
 ```bash
 docker logs -f core-api-container
+```
+
+Los logs `GET /health` aparecen frecuentemente porque Docker ejecuta el healthcheck de manera periódica.
+
+---
+
+## 🌍 CORS
+
+El backend tiene CORS configurado para permitir que el frontend pueda consumir la API desde otro origen.
+
+Ejemplo:
+
+```js
+const cors = require('cors');
+
+app.use(cors());
+```
+
+Esto permite que el frontend en Vercel pueda consumir el backend desplegado en DigitalOcean.
+
+Más adelante se puede endurecer esta configuración para permitir solo orígenes específicos, por ejemplo:
+
+```js
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'https://cloudops-portal.vercel.app'
+  ]
+}));
 ```
 
 ---
@@ -346,7 +626,7 @@ docker compose down
 
 ## 🧠 Conceptos aprendidos
 
-Durante esta fase se reforzaron conceptos clave de Docker:
+Durante esta fase se reforzaron conceptos clave de Docker, cloud y arquitectura local:
 
 ### Imagen
 
@@ -382,31 +662,43 @@ Permite definir y ejecutar servicios desde un archivo YAML, evitando escribir ma
 
 ### Variables de entorno
 
-Permiten separar configuración del código.
+Permiten separar configuración del código.  
+`.env` guarda valores locales reales y `.env.example` documenta qué variables necesita el proyecto.
 
 ### Logs
 
 La aplicación escribe logs con `console.log`, Docker los captura y se consultan con `docker compose logs`.
 
+### Healthcheck
+
+Docker verifica periódicamente si el contenedor está saludable consultando el endpoint `/health`.
+
+### CORS
+
+Permite que el frontend pueda consumir una API que vive en otro origen, dominio o puerto.
+
+### Integración frontend-backend
+
+El frontend consume el endpoint `/status` del backend para mostrar el estado real del microservicio.
+
+### Deploy cloud
+
+El frontend vive en Vercel y el backend vive en DigitalOcean App Platform.
+
 ---
 
 ## 🧪 Pruebas de API
 
-Con el contenedor levantado, probar:
+### Pruebas locales
 
-### Health check
+Con el contenedor levantado, probar:
 
 ```bash
 curl http://localhost:4000/health
-```
-
-### Status
-
-```bash
 curl http://localhost:4000/status
 ```
 
-### POST test
+POST test:
 
 ```bash
 curl -X POST http://localhost:4000/test \
@@ -414,14 +706,19 @@ curl -X POST http://localhost:4000/test \
   -d '{"message":"testing from docker compose"}'
 ```
 
----
-
-## 🌐 Deploy
-
-Frontend desplegado en Vercel:
+### Pruebas en DigitalOcean
 
 ```bash
-https://cloudops-portal.vercel.app/
+curl https://whale-app-6iffy.ondigitalocean.app/health
+curl https://whale-app-6iffy.ondigitalocean.app/status
+```
+
+POST test:
+
+```bash
+curl -X POST https://whale-app-6iffy.ondigitalocean.app/test \
+  -H "Content-Type: application/json" \
+  -d '{"message":"testing from digitalocean"}'
 ```
 
 ---
@@ -444,6 +741,12 @@ Instalar dependencias:
 
 ```bash
 npm install
+```
+
+Crear archivo `.env.local`:
+
+```bash
+cp .env.example .env.local
 ```
 
 Ejecutar en modo desarrollo:
@@ -497,9 +800,9 @@ npm run lint
 - Desplegar frontend en Vercel
 - Crear backend base con Node.js + Express
 
-Estado: completado parcialmente.
+Estado: avanzado.
 
-### Fase 2 — Docker
+### Fase 2 — Docker e integración local
 
 - Crear Dockerfile para `core-api`
 - Crear `.dockerignore`
@@ -508,9 +811,21 @@ Estado: completado parcialmente.
 - Agregar Docker Compose
 - Configurar variables de entorno
 - Agregar logs básicos por request
+- Agregar healthcheck
+- Conectar frontend con backend localmente
 - Preparar entorno local reproducible
 
-Estado: en progreso avanzado.
+Estado: avanzado.
+
+### Fase 2.5 — Backend público en cloud
+
+- Desplegar `core-api` en DigitalOcean App Platform
+- Configurar variables de entorno en DigitalOcean
+- Validar endpoints públicos `/health` y `/status`
+- Conectar Vercel con el backend público
+- Confirmar frontend consumiendo backend en producción
+
+Estado: completado.
 
 ### Fase 3 — Microservicios
 
@@ -519,12 +834,13 @@ Estado: en progreso avanzado.
 - Crear servicio de autenticación
 - Implementar API Gateway básico
 
-### Fase 4 — Cloud
+### Fase 4 — Cloud avanzado
 
-- Desplegar servicios en DigitalOcean
 - Crear cluster Kubernetes con DOKS
 - Configurar Load Balancer
 - Preparar manifiestos Kubernetes
+- Publicar imágenes en un registry
+- Automatizar despliegues
 
 ### Fase 5 — DevOps real
 
@@ -537,17 +853,38 @@ Estado: en progreso avanzado.
 
 ---
 
+## 📊 Avance estimado del proyecto
+
+```bash
+Proyecto completo CloudOps Lab: 40% - 45%
+```
+
+Avance por fases:
+
+```bash
+FASE 1 — Base del proyecto: 90%
+FASE 2 — Docker: 85%
+FASE 2.5 — Backend público: 90%
+FASE 3 — Microservicios: 5%
+FASE 4 — Kubernetes / Cloud avanzado: 5%
+FASE 5 — CI/CD / Monitoring / Security: 10%
+```
+
+---
+
 ## 🧭 Próximos pasos técnicos
 
 Siguientes mejoras recomendadas:
 
-- Agregar `healthcheck` en `docker-compose.yml`
-- Crear archivo `.env` para variables de entorno
+- Ajustar CORS para permitir únicamente orígenes autorizados
+- Manejar estados de carga y error en el frontend
 - Mejorar logs con formato estructurado
-- Documentar arquitectura inicial
+- Documentar arquitectura inicial con diagrama
 - Preparar `docker-compose` para múltiples servicios
 - Agregar base de datos en contenedor
 - Preparar primer microservicio adicional
+- Publicar imagen Docker en un registry
+- Migrar progresivamente hacia Kubernetes en DigitalOcean
 
 ---
 
@@ -565,11 +902,6 @@ Este proyecto está orientado a desarrollar habilidades para roles como:
 El enfoque principal es construir una plataforma realista, escalable y mantenible, aplicando buenas prácticas de arquitectura de software, operación cloud y automatización.
 
 ---
-##healthcheck
-.env
-.env.example
-env_file
-variable fuera de YAML
 
 ## 📌 Repositorios relacionados
 
@@ -582,7 +914,7 @@ https://github.com/Darkreach2023/cloudops-portal
 Backend:
 
 ```bash
-core-api
+https://github.com/Darkreach2023/cloudops-core-api
 ```
 
 ---
