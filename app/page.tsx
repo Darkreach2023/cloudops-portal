@@ -26,8 +26,19 @@ async function getCoreApiStatus(): Promise<CoreApiStatus | null> {
   }
 }
 
+async function getUsersSummary() {
+  const apiUrl = process.env.NEXT_PUBLIC_CORE_API_URL;
+
+  const response = await fetch(`${apiUrl}/users-summary`, {
+    cache: "no-store",
+  });
+
+  return response.json();
+}
+
 export default async function Home() {
   const coreApiStatus = await getCoreApiStatus();
+  const usersSummary = await getUsersSummary(); 
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-50">
